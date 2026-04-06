@@ -107,7 +107,6 @@
       width: 100%;
       height: 100%;
       pointer-events: none;
-      transform: scaleX(-1);
     }
 
     /* Live badge */
@@ -481,10 +480,13 @@
             var box = result.detection.box;
             var match = matchFace(result.descriptor);
 
+            // Mirror พิกัดกรอบให้ตรงกับ video ที่ scaleX(-1)
+            var mirroredX = overlay.width - box.x - box.width;
+
             // วาดกรอบ
             ctx.strokeStyle = match.matched ? '#22c55e' : '#f59e0b';
             ctx.lineWidth = 3;
-            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            ctx.strokeRect(mirroredX, box.y, box.width, box.height);
 
             // วาด label
             var label = match.matched
@@ -494,9 +496,9 @@
             ctx.font = 'bold 14px Sarabun, sans-serif';
             var lw = ctx.measureText(label).width + 16;
             ctx.fillStyle = match.matched ? '#22c55e' : '#f59e0b';
-            ctx.fillRect(box.x, box.y - 28, lw, 24);
+            ctx.fillRect(mirroredX, box.y - 28, lw, 24);
             ctx.fillStyle = '#fff';
-            ctx.fillText(label, box.x + 8, box.y - 10);
+            ctx.fillText(label, mirroredX + 8, box.y - 10);
 
             // นับ consecutive matches
             if (match.matched) {
