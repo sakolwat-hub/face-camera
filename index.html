@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Face Recognition Camera</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- face-api.js -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Sarabun', sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .header .subtitle {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+    .header .close-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: #fff;
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .header .close-btn:hover { background: rgba(255,255,255,0.3); }
+
+    /* ===== STATUS BAR ===== */
+    .status-bar {
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-bar.loading { background: #1e3a5f; color: #93c5fd; }
+    .status-bar.ready { background: #14532d; color: #86efac; }
+    .status-bar.matched { background: #166534; color: #4ade80; }
+    .status-bar.mismatch { background: #7f1d1d; color: #fca5a5; }
+    .status-bar.no-face { background: #78350f; color: #fcd34d; }
+    .status-bar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .status-bar.loading .dot,
+    .status-bar.ready .dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ===== CAMERA ===== */
+    .camera-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      transform: scaleX(-1);
+    }
+
+    /* Live badge */
+    .live-badge {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(239, 68, 68, 0.85);
+      backdrop-filter: blur(4px);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      z-index: 10;
+    }
+    .live-badge .rec-dot {
+      width: 6px; height: 6px;
+      background: #fca5a5;
+      border-radius: 50%;
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+
+    /* Match result overlay */
+    .match-overlay {
+      position: absolute;
+      bottom: 100px;
+      left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+      z-index: 10;
+      padding: 0 16px;
+    }
+    .match-card {
+      padding: 12px 20px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: slide-up 0.3s ease;
+      max-width: 400px;
+      width: 100%;
+    }
+    .match-card.success { background: rgba(22, 163, 74, 0.9); }
+    .match-card.warning { background: rgba(234, 88, 12, 0.9); }
+    .match-card.error { background: rgba(220, 38, 38, 0.9); }
+    .match-card .icon {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .match-card .info { flex: 1; }
+    .match-card .name { font-size: 15px; font-weight: 800; }
+    .match-card .detail { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    @keyframes slide-up {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* ===== BOTTOM CONTROLS ===== */
+    .controls {
+      padding: 16px;
+      background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.7));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+    .capture-btn {
+      width: 70px; height: 70px;
+      border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.6);
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .capture-btn:active { transform: scale(0.9); }
+    .capture-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .capture-btn .inner {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: #fff;
+      transition: background 0.2s;
+    }
+    .capture-btn.confirmed .inner { background: #22c55e; }
+
+    .confirm-btn {
+      padding: 14px 32px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-weight: 800;
+      font-family: 'Sarabun', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: none;
+    }
+    .confirm-btn:active { transform: scale(0.95); }
+    .confirm-btn.show { display: flex; align-items: center; gap: 8px; }
+    .confirm-btn.success {
+      background: #22c55e;
+      color: #fff;
+    }
+    .confirm-btn.retry {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+    }
+
+    /* ===== LOADING SCREEN ===== */
+    .loading-screen {
+      position: absolute;
+      inset: 0;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      gap: 16px;
+    }
+    .loading-screen.hidden { display: none; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(124, 58, 237, 0.3);
+      border-top-color: #7c3aed;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-screen p { font-size: 14px; color: #a1a1aa; }
+    .loading-screen .progress-text { font-size: 12px; color: #71717a; }
+
+    /* ===== CAPTURED PREVIEW ===== */
+    .captured-preview {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: none;
+    }
+    .captured-preview.show { display: block; }
+    .captured-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .captured-preview canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <h1 id="headerTitle">Face Recognition</h1>
+      <div class="subtitle" id="headerUser">กำลังเตรียมระบบ...</div>
+    </div>
+    <button class="close-btn" onclick="cancelAndClose()" title="ปิด">&times;</button>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar loading" id="statusBar">
+    <span class="dot"></span>
+    <span id="statusText">กำลังเตรียมระบบ...</span>
+  </div>
+
+  <!-- CAMERA -->
+  <div class="camera-container">
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+      <div class="spinner"></div>
+      <p id="loadingText">กำลังโหลด AI Models...</p>
+      <div class="progress-text" id="loadingProgress">อาจใช้เวลา 5-10 วินาที</div>
+    </div>
+
+    <!-- Video -->
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+
+    <!-- Live Badge -->
+    <div class="live-badge" id="liveBadge" style="display:none;">
+      <span class="rec-dot"></span> LIVE — ถ่ายสดเท่านั้น
+    </div>
+
+    <!-- Match Result Overlay -->
+    <div class="match-overlay" id="matchOverlay" style="display:none;"></div>
+
+    <!-- Captured Photo Preview -->
+    <div class="captured-preview" id="capturedPreview">
+      <img id="capturedImg" src="">
+      <canvas id="capturedOverlayCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls" id="controls">
+    <button class="confirm-btn retry" id="retryBtn" onclick="retryCapture()">↻ ถ่ายใหม่</button>
+    <button class="capture-btn" id="captureBtn" disabled onclick="captureAndAnalyze()">
+      <div class="inner"></div>
+    </button>
+    <button class="confirm-btn success" id="confirmBtn" onclick="confirmAndSend()">✓ ยืนยันเช็คอิน</button>
+  </div>
+
+  <script>
+    // ===== CONFIG จาก URL params =====
+    const params = new URLSearchParams(window.location.search);
+    const ORIGIN = params.get('origin') || '*';
+    const USER_ID = params.get('user_id') || '';
+    const USER_NAME = decodeURIComponent(params.get('user_name') || '');
+    const MATCH_THRESHOLD = parseFloat(params.get('threshold') || '0.45');
+
+    // face data จะส่งมาทาง postMessage จาก GAS
+    let registeredFaces = [];
+    let matchResult = null;
+    let capturedBase64 = null;
+    let videoStream = null;
+
+    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
+
+    // ===== DOM =====
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const statusBar = document.getElementById('statusBar');
+    const statusText = document.getElementById('statusText');
+    const loadingScreen = document.getElementById('loadingScreen');
+    const loadingTextEl = document.getElementById('loadingText');
+    const loadingProgress = document.getElementById('loadingProgress');
+    const captureBtn = document.getElementById('captureBtn');
+    const confirmBtn = document.getElementById('confirmBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const liveBadge = document.getElementById('liveBadge');
+    const matchOverlay = document.getElementById('matchOverlay');
+    const capturedPreview = document.getElementById('capturedPreview');
+
+    // ===== INIT =====
+    document.getElementById('headerUser').textContent = USER_NAME || 'พนักงาน';
+
+    // รอรับ face data จาก parent window
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'face_data') {
+        console.log('[Camera] ได้รับ Face Data:', event.data.faces?.length, 'คน');
+        registeredFaces = (event.data.faces || []).map(function(f) {
+          return {
+            userId: f.userId,
+            userName: f.userName,
+            descriptor: new Float32Array(f.descriptor)
+          };
+        });
+        startSystem();
+      }
+    });
+
+    // แจ้ง parent ว่าพร้อมรับข้อมูล
+    if (window.opener) {
+      window.opener.postMessage({ type: 'camera_ready' }, ORIGIN);
+    }
+
+    // Timeout: ถ้าไม่ได้รับ face data ใน 5 วินาที → เริ่มโดยไม่มี face data
+    setTimeout(function() {
+      if (registeredFaces.length === 0) {
+        console.log('[Camera] Timeout — เริ่มโดยไม่มี Face Data');
+        startSystem();
+      }
+    }, 5000);
+
+    // ===== START SYSTEM =====
+    async function startSystem() {
+      try {
+        // 1. โหลด AI Models
+        setStatus('loading', 'กำลังโหลด AI Models...');
+        loadingTextEl.textContent = 'กำลังโหลด AI Models...';
+        loadingProgress.textContent = 'ครั้งแรกอาจใช้เวลา 5-10 วินาที';
+
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+
+        console.log('[Camera] AI Models โหลดสำเร็จ');
+
+        // 2. เปิดกล้อง
+        loadingTextEl.textContent = 'กำลังเปิดกล้อง...';
+        loadingProgress.textContent = 'กรุณาอนุญาตการเข้าถึงกล้อง';
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+
+        videoStream = stream;
+        video.srcObject = stream;
+
+        await new Promise(function(resolve) {
+          video.onloadedmetadata = function() {
+            video.play();
+            resolve();
+          };
+        });
+
+        // 3. พร้อมใช้งาน
+        loadingScreen.classList.add('hidden');
+        liveBadge.style.display = 'flex';
+        captureBtn.disabled = false;
+
+        if (registeredFaces.length > 0) {
+          setStatus('ready', 'พร้อมใช้งาน — พบ ' + registeredFaces.length + ' ใบหน้าในระบบ');
+        } else {
+          setStatus('no-face', 'ไม่มีใบหน้าลงทะเบียน — ใช้โหมดถ่ายรูปปกติ');
+        }
+
+        // 4. เริ่ม Real-time detection
+        if (registeredFaces.length > 0) {
+          startDetection();
+        }
+
+      } catch (e) {
+        console.error('[Camera] Error:', e);
+        loadingTextEl.textContent = 'เกิดข้อผิดพลาด';
+        loadingProgress.textContent = e.name === 'NotAllowedError'
+          ? 'กรุณาอนุญาตการเข้าถึงกล้องแล้วลองใหม่'
+          : e.message;
+        setStatus('mismatch', 'เกิดข้อผิดพลาด: ' + e.message);
+      }
+    }
+
+    // ===== REAL-TIME FACE DETECTION =====
+    let detecting = true;
+    let consecutiveMatches = 0;
+    let lastMatchedId = null;
+    let confirmedMatch = null;
+
+    async function startDetection() {
+      const ctx = overlay.getContext('2d');
+
+      async function detect() {
+        if (!detecting || video.paused || video.ended) {
+          requestAnimationFrame(detect);
+          return;
+        }
+
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        try {
+          var result = await faceapi
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          if (result) {
+            var box = result.detection.box;
+            var match = matchFace(result.descriptor);
+
+            // วาดกรอบ
+            ctx.strokeStyle = match.matched ? '#22c55e' : '#f59e0b';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+            // วาด label
+            var label = match.matched
+              ? match.userName + ' (' + match.confidence + '%)'
+              : 'กำลังตรวจสอบ... (' + match.confidence + '%)';
+
+            ctx.font = 'bold 14px Sarabun, sans-serif';
+            var lw = ctx.measureText(label).width + 16;
+            ctx.fillStyle = match.matched ? '#22c55e' : '#f59e0b';
+            ctx.fillRect(box.x, box.y - 28, lw, 24);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label, box.x + 8, box.y - 10);
+
+            // นับ consecutive matches
+            if (match.matched) {
+              if (match.userId === lastMatchedId) {
+                consecutiveMatches++;
+              } else {
+                consecutiveMatches = 1;
+                lastMatchedId = match.userId;
+              }
+
+              if (consecutiveMatches >= 3 && !confirmedMatch) {
+                confirmedMatch = match;
+                onMatchConfirmed(match);
+              }
+            } else {
+              consecutiveMatches = 0;
+              lastMatchedId = null;
+            }
+          }
+        } catch(e) { /* ignore */ }
+
+        setTimeout(function() { requestAnimationFrame(detect); }, 200);
+      }
+
+      detect();
+    }
+
+    // ===== FACE MATCHING =====
+    function matchFace(descriptor) {
+      if (registeredFaces.length === 0) {
+        return { matched: false, confidence: 0, message: 'ไม่มีใบหน้าลงทะเบียน' };
+      }
+
+      var bestMatch = null;
+      var bestDistance = Infinity;
+
+      for (var i = 0; i < registeredFaces.length; i++) {
+        var dist = faceapi.euclideanDistance(descriptor, registeredFaces[i].descriptor);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          bestMatch = registeredFaces[i];
+        }
+      }
+
+      var confidence = Math.round((1 - bestDistance) * 100);
+
+      if (bestDistance <= MATCH_THRESHOLD && bestMatch) {
+        return {
+          matched: true,
+          userId: bestMatch.userId,
+          userName: bestMatch.userName,
+          distance: bestDistance,
+          confidence: confidence
+        };
+      }
+
+      return { matched: false, distance: bestDistance, confidence: confidence };
+    }
+
+    // ===== MATCH CONFIRMED =====
+    function onMatchConfirmed(match) {
+      console.log('[Camera] Match confirmed:', match.userName, match.confidence + '%');
+
+      var isCorrectUser = match.userId === USER_ID;
+
+      if (isCorrectUser) {
+        setStatus('matched', '✓ ยืนยันตัวตน: ' + match.userName + ' (' + match.confidence + '%)');
+        showMatchCard('success', '✓', match.userName, 'ยืนยันตัวตนสำเร็จ (' + match.confidence + '%)');
+      } else {
+        setStatus('mismatch', '✗ ใบหน้าไม่ตรง — ตรวจพบ: ' + match.userName);
+        showMatchCard('error', '✗', 'ใบหน้าไม่ตรงกับผู้ใช้', 'ตรวจพบ: ' + match.userName + ' | ล็อกอิน: ' + USER_NAME);
+        confirmedMatch = null; // reset
+      }
+    }
+
+    // ===== CAPTURE & ANALYZE =====
+    async function captureAndAnalyze() {
+      detecting = false; // หยุด detection ชั่วคราว
+
+      // ถ่ายภาพ
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+
+      // Mirror
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      // Watermark
+      var barH = Math.max(28, canvas.height * 0.05);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+
+      var now = new Date();
+      var timeStr = now.toLocaleString('th-TH', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      var fontSize = Math.max(10, barH * 0.45);
+      ctx.font = 'bold ' + fontSize + 'px Sarabun, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(USER_NAME, 10, canvas.height - (barH / 2) + (fontSize / 3));
+      ctx.textAlign = 'right';
+      ctx.fillText(timeStr, canvas.width - 10, canvas.height - (barH / 2) + (fontSize / 3));
+
+      capturedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+      // แสดง preview
+      var imgEl = document.getElementById('capturedImg');
+      imgEl.src = capturedBase64;
+      capturedPreview.classList.add('show');
+
+      // วิเคราะห์ใบหน้า (ถ้ายังไม่ match)
+      if (!confirmedMatch && registeredFaces.length > 0) {
+        setStatus('loading', 'กำลังวิเคราะห์ใบหน้า...');
+
+        try {
+          var img = new Image();
+          img.src = capturedBase64;
+          await new Promise(function(r) { img.onload = r; });
+
+          var result = await faceapi
+            .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          if (result) {
+            var match = matchFace(result.descriptor);
+            if (match.matched) {
+              confirmedMatch = match;
+              onMatchConfirmed(match);
+            } else {
+              setStatus('no-face', 'ไม่พบใบหน้าที่ตรงกัน (' + match.confidence + '%)');
+              showMatchCard('warning', '?', 'ไม่พบใบหน้าที่ตรงกัน', 'ความใกล้เคียง ' + match.confidence + '% — กรุณาถ่ายใหม่');
+            }
+          } else {
+            setStatus('no-face', 'ไม่พบใบหน้าในภาพ');
+            showMatchCard('warning', '!', 'ไม่พบใบหน้าในภาพ', 'กรุณาถ่ายใหม่ให้เห็นหน้าชัดเจน');
+          }
+        } catch(e) {
+          console.error('[Camera] Analyze error:', e);
+        }
+      }
+
+      // แสดงปุ่ม
+      retryBtn.classList.add('show');
+      if (confirmedMatch && confirmedMatch.userId === USER_ID) {
+        confirmBtn.classList.add('show');
+        captureBtn.style.display = 'none';
+      }
+    }
+
+    // ===== RETRY =====
+    function retryCapture() {
+      capturedPreview.classList.remove('show');
+      capturedBase64 = null;
+      confirmedMatch = null;
+      confirmedMatch = null;
+      consecutiveMatches = 0;
+      lastMatchedId = null;
+      matchOverlay.style.display = 'none';
+
+      retryBtn.classList.remove('show');
+      confirmBtn.classList.remove('show');
+      captureBtn.style.display = '';
+      captureBtn.classList.remove('confirmed');
+
+      detecting = true;
+      if (registeredFaces.length > 0) {
+        setStatus('ready', 'พร้อมใช้งาน — หันหน้าเข้ากล้อง');
+      }
+    }
+
+    // ===== CONFIRM & SEND BACK TO GAS =====
+    function confirmAndSend() {
+      var result = {
+        type: 'face_result',
+        success: true,
+        matched: !!confirmedMatch,
+        userId: confirmedMatch ? confirmedMatch.userId : '',
+        userName: confirmedMatch ? confirmedMatch.userName : '',
+        confidence: confirmedMatch ? confirmedMatch.confidence : 0,
+        capturedImage: capturedBase64,
+        timestamp: Date.now()
+      };
+
+      // ส่งกลับ parent window
+      if (window.opener) {
+        window.opener.postMessage(result, ORIGIN);
+      }
+
+      // ปิด popup
+      setTimeout(function() { window.close(); }, 500);
+    }
+
+    // ===== CANCEL =====
+    function cancelAndClose() {
+      if (window.opener) {
+        window.opener.postMessage({ type: 'face_result', success: false, cancelled: true }, ORIGIN);
+      }
+      stopCamera();
+      window.close();
+    }
+
+    // ===== HELPERS =====
+    function setStatus(type, text) {
+      statusBar.className = 'status-bar ' + type;
+      statusText.textContent = text;
+    }
+
+    function showMatchCard(type, icon, name, detail) {
+      matchOverlay.style.display = 'flex';
+      matchOverlay.innerHTML = '<div class="match-card ' + type + '">'
+        + '<div class="icon">' + icon + '</div>'
+        + '<div class="info">'
+        + '<div class="name">' + name + '</div>'
+        + '<div class="detail">' + detail + '</div>'
+        + '</div></div>';
+    }
+
+    function stopCamera() {
+      detecting = false;
+      if (videoStream) {
+        videoStream.getTracks().forEach(function(t) { t.stop(); });
+        videoStream = null;
+      }
+    }
+
+    // ปิดกล้องเมื่อปิดหน้าต่าง
+    window.addEventListener('beforeunload', stopCamera);
+  </script>
+</body>
+</html>
